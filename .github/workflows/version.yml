@@ -1,0 +1,44 @@
+name: Version release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: b4skinapp-version-release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    if: github.actor != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[version-bump]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create initial tag or increase patch version
+        id: version
+        shell: bash
+        run: |
+          if git cat-file -e "HEAD^:VERSION" 2>/dev/null; then
+            version="$(python3 tools/bump_version.py)"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add VERSION
+            git commit -m "Bump version to ${version} [version-bump]"
+          else
+            version="$(tr -d '\r\n' < VERSION)"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Tag and publish version
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          git tag -a "v${version}" -m "b4Default-FHD Skin App ${version}"
+          git push origin HEAD:main --follow-tags

@@ -96,7 +96,7 @@ def current_palette(path):
 
 def atomic_write(path, payload, mode=0o644):
     directory = os.path.dirname(os.path.abspath(path))
-    fd, temp = tempfile.mkstemp(prefix='.dreamng-', dir=directory)
+    fd, temp = tempfile.mkstemp(prefix='.b4skinapp-', dir=directory)
     try:
         with os.fdopen(fd, 'wb') as stream:
             stream.write(payload)
@@ -115,7 +115,7 @@ def apply_palette(path, key):
         original = stream.read()
     root = ET.fromstring(original)
     if root.tag != 'skin' or root.find("./colors/color[@name='nextAccent']") is None:
-        raise ValueError('Default-FHD-DreamNG skin.xml is required')
+        raise ValueError('A compatible Default-FHD skin.xml is required')
     accent, selected = PALETTES[key]
     text = original.decode('utf-8')
     changes = [0]
@@ -164,7 +164,7 @@ def apply_panel_visibility(path, visibility):
             re.MULTILINE,
         )
         disabled_pattern = re.compile(
-            r'^(?P<indent>[ \t]*)<!--\s*DreamNG panel %s disabled\s*-->[ \t]*(?P<eol>\r?)$'
+            r'^(?P<indent>[ \t]*)<!--\s*[A-Za-z0-9_-]+ panel %s disabled\s*-->[ \t]*(?P<eol>\r?)$'
             % re.escape(name),
             re.MULTILINE,
         )
@@ -177,7 +177,7 @@ def apply_panel_visibility(path, visibility):
             replacement = '%s<panel name="%s" />%s' % (current.group('indent'), name, current.group('eol'))
         else:
             current = enabled_match or disabled_match
-            replacement = '%s<!-- DreamNG panel %s disabled -->%s' % (current.group('indent'), name, current.group('eol'))
+            replacement = '%s<!-- b4SkinApp panel %s disabled -->%s' % (current.group('indent'), name, current.group('eol'))
         body = body[:current.start()] + replacement + body[current.end():]
     changed = text[:screen_match.start(2)] + body + text[screen_match.end(2):]
     ET.fromstring(changed)

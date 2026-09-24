@@ -71,30 +71,30 @@ def configure_channel_list(screen):
 def _apply_channel_list(screen):
     try:
         if not configure_channel_list(screen):
-            print('[DreamNG][Channel] unsupported service-list implementation')
+            print('[b4SkinApp][Channel] unsupported service-list implementation')
     except Exception as error:
-        print('[DreamNG][Channel] configuration failed: %s' % error)
+        print('[b4SkinApp][Channel] configuration failed: %s' % error)
 
 
 def install_channel_list_hook():
-    """Attach DreamNG typography to every real ChannelSelection instance."""
+    """Attach b4SkinApp typography to every real ChannelSelection instance."""
     try:
         from Screens.ChannelSelection import ChannelSelection
     except Exception as error:
-        print('[DreamNG][Channel] ChannelSelection unavailable: %s' % error)
+        print('[b4SkinApp][Channel] ChannelSelection unavailable: %s' % error)
         return False
 
-    if not getattr(ChannelSelection, '_dreamng_hook_installed', False):
+    if not getattr(ChannelSelection, '_b4skinapp_hook_installed', False):
         original_apply_skin = ChannelSelection.applySkin
 
-        def dreamng_apply_skin(screen, *args, **kwargs):
+        def b4skinapp_apply_skin(screen, *args, **kwargs):
             result = original_apply_skin(screen, *args, **kwargs)
             _apply_channel_list(screen)
             return result
 
-        ChannelSelection.applySkin = dreamng_apply_skin
-        ChannelSelection._dreamng_original_apply_skin = original_apply_skin
-        ChannelSelection._dreamng_hook_installed = True
+        ChannelSelection.applySkin = b4skinapp_apply_skin
+        ChannelSelection._b4skinapp_original_apply_skin = original_apply_skin
+        ChannelSelection._b4skinapp_hook_installed = True
 
     instance = getattr(ChannelSelection, 'instance', None)
     if instance is not None:

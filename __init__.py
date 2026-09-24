@@ -1,1 +1,1 @@
-# AIOHD NEXT style settings.
+# b4Default-FHD Skin App package.

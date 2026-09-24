@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Weather integration for AIOHD NEXT.
+"""Weather integration for b4Default-FHD Skin App.
 
 Inline weather and the full-screen weather launcher are intentionally separate.
 The inline manager can read two OpenATV-compatible backends:
@@ -20,7 +20,8 @@ from Components.config import config
 from Plugins.Plugin import PluginDescriptor
 from enigma import eTimer
 
-from .dialog import DreamNGMessageBox as MessageBox
+from .dialog import b4SkinAppMessageBox as MessageBox
+from .paths import SKIN_DIR
 from .settings import settings, tr
 
 WORDS = ('weather', 'pogoda', 'foreca', 'wetter', 'meteo')
@@ -29,13 +30,13 @@ SOURCE_TEMP = 'b4WeatherTemp'
 SOURCE_CONDITION = 'b4WeatherCondition'
 SOURCE_ICON = 'b4WeatherIcon'
 SOURCE_VISIBLE = 'b4WeatherVisible'
-DREAMNG_ANIMATED_WEATHER_ICONS = '/usr/share/enigma2/Default-FHD-DreamNG/animated_weather_icons'
-DREAMNG_STATIC_WEATHER_ICONS = '/usr/share/enigma2/Default-FHD-DreamNG/weather_icons'
+B4SKINAPP_ANIMATED_WEATHER_ICONS = os.path.join(SKIN_DIR, 'animated_weather_icons')
+B4SKINAPP_STATIC_WEATHER_ICONS = os.path.join(SKIN_DIR, 'weather_icons')
 
 
 def _log(message):
     try:
-        print('[DreamNG][Weather] %s' % message)
+        print('[b4SkinApp][Weather] %s' % message)
     except Exception:
         pass
 
@@ -63,7 +64,7 @@ def weather_plugins(show_all=False):
             fnc = launcher(descriptor)
             module = str(getattr(fnc, '__module__', ''))
             identity = (name + ' ' + path + ' ' + module).lower()
-            if 'b4style' in identity or name.startswith('DreamNG'):
+            if 'b4skinapp' in identity or name.startswith('b4Default-FHD Skin App'):
                 continue
             if not callable(fnc):
                 continue
@@ -90,7 +91,7 @@ def preferred_weather_key(entries=None):
 def open_weather(session, key=None):
     if key is None:
         if not settings.weatherEnabled.value:
-            session.open(MessageBox, tr('Włącz skrót pogody w ustawieniach DreamNG.', 'Enable the weather shortcut in DreamNG settings.'), MessageBox.TYPE_INFO)
+            session.open(MessageBox, tr('Włącz skrót pogody w ustawieniach b4SkinApp.', 'Enable the weather shortcut in b4SkinApp settings.'), MessageBox.TYPE_INFO)
             return
         key = settings.weatherPlugin.value or preferred_weather_key()
     selected = next((p for p in weather_plugins(show_all=True) if p[0] == key), None)
@@ -379,14 +380,14 @@ class b4WeatherManager(object):
         candidates = []
         if code:
             candidates.extend((
-                os.path.join(DREAMNG_ANIMATED_WEATHER_ICONS, code, 'a0.png'),
-                os.path.join(DREAMNG_STATIC_WEATHER_ICONS, code + '.png'),
+                os.path.join(B4SKINAPP_ANIMATED_WEATHER_ICONS, code, 'a0.png'),
+                os.path.join(B4SKINAPP_STATIC_WEATHER_ICONS, code + '.png'),
             ))
         if provider_icon:
             candidates.append(provider_icon)
         candidates.extend((
-            os.path.join(DREAMNG_ANIMATED_WEATHER_ICONS, 'NA', 'a0.png'),
-            os.path.join(DREAMNG_STATIC_WEATHER_ICONS, 'NA.png'),
+            os.path.join(B4SKINAPP_ANIMATED_WEATHER_ICONS, 'NA', 'a0.png'),
+            os.path.join(B4SKINAPP_STATIC_WEATHER_ICONS, 'NA.png'),
         ))
         return next((filename for filename in candidates if os.path.isfile(filename)), '')
 

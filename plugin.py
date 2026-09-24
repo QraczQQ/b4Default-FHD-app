@@ -9,16 +9,17 @@ from Components.config import ConfigSelection, ConfigYesNo, getConfigListEntry, 
 from .theme import current_palette, apply_palette, apply_panel_visibility, apply_channel_colors, palette_choices
 from .settings import settings, tr
 from .channel import install_channel_list_hook
-from .dialog import DreamNGMessageBox as MessageBox
+from .dialog import b4SkinAppMessageBox as MessageBox
 from .weather import weather_plugins, preferred_weather_key, open_weather, start_weather_sources
+from .updater import APP_VERSION, b4SkinAppUpdater
+from .paths import SKIN_PATH
 
-SKIN_PATH = '/usr/share/enigma2/Default-FHD-DreamNG/skin.xml'
 
-
-class DreamNGStyle(Screen, ConfigListScreen):
-    skin = '''<screen name="DreamNGStyle" position="center,center" size="1360,800" title="DreamNG Skin App" backgroundColor="#000B111A">
+class b4SkinAppStyle(Screen, ConfigListScreen):
+    skin = '''<screen name="b4SkinAppStyle" position="center,center" size="1360,800" title="b4Default-FHD Skin App" backgroundColor="#000B111A" flags="wfNoBorder">
       <eLabel position="0,0" size="1360,6" backgroundColor="#0034D6CF" />
-      <widget name="heading" position="44,30" size="1272,56" font="Regular;36" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
+      <widget name="heading" position="44,30" size="690,56" font="Regular;36" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
+      <widget name="version" position="742,34" size="574,46" font="Regular;24" halign="right" foregroundColor="#00ADBACA" backgroundColor="#000B111A" />
       <widget name="config" position="44,112" size="1272,504" itemHeight="56" font="Regular;30" backgroundColor="#00141E2A" foregroundColor="#00F2F5FA" backgroundColorSelected="#00007678" foregroundColorSelected="#00FFFFFF" scrollbarMode="showOnDemand" />
       <widget name="description" position="44,625" size="1272,72" font="Regular;20" foregroundColor="#00ADBACA" backgroundColor="#000B111A" />
       <eLabel position="44,714" size="6,30" backgroundColor="#00FF5A68" />
@@ -33,8 +34,9 @@ class DreamNGStyle(Screen, ConfigListScreen):
 
     def __init__(self, session):
         Screen.__init__(self, session)
-        self.setTitle('DreamNG Skin App')
-        self['heading'] = Label(tr('DreamNG Skin App — wygląd i pogoda', 'DreamNG Skin App — appearance and weather'))
+        self.setTitle('b4Default-FHD Skin App')
+        self['heading'] = Label(tr('b4Default-FHD Skin App — wygląd i pogoda', 'b4Default-FHD Skin App — appearance and weather'))
+        self['version'] = Label(tr('Wersja ', 'Version ') + APP_VERSION + tr('  |  MENU: Aktualizacja', '  |  MENU: Update'))
         self['key_red'] = Label(tr('Anuluj', 'Cancel'))
         self['key_green'] = Label(tr('Zapisz', 'Save'))
         self.showAllPlugins = False
@@ -50,8 +52,8 @@ class DreamNGStyle(Screen, ConfigListScreen):
         self.showTimeDate = ConfigYesNo(default=settings.showTimeDate.value)
         self.showExtraInfo = ConfigYesNo(default=settings.showExtraInfo.value)
         self.showCI = ConfigYesNo(default=settings.showCI.value)
-        self.showDreamNextGenPanel = ConfigSelection(
-            default=settings.showDreamNextGenPanel.value,
+        self.showReceiverPanel = ConfigSelection(
+            default=settings.showReceiverPanel.value,
             choices=[('no', tr('Nie', 'No')), ('dreambox', 'DMTwo/DMOne')],
         )
         color_choices = [
@@ -93,13 +95,16 @@ class DreamNGStyle(Screen, ConfigListScreen):
             getConfigListEntry(tr('Pokaż datę i czas', 'Show date and time'), self.showTimeDate),
             getConfigListEntry(tr('Pokaż dane dodatkowe', 'Show additional information'), self.showExtraInfo),
             getConfigListEntry(tr('Pokaż Dane CI', 'Show CI data'), self.showCI),
-            getConfigListEntry(tr('Pokaż panel DreamNextGen', 'Show DreamNextGen panel'), self.showDreamNextGenPanel),
+            getConfigListEntry(tr('Pokaż panel odbiornika', 'Show receiver panel'), self.showReceiverPanel),
             getConfigListEntry(tr('Pogoda bezpośrednio w skinie', 'Inline weather in skin'), self.weatherInline),
             getConfigListEntry(tr('Źródło danych pogody', 'Inline weather provider'), self.weatherProvider),
             getConfigListEntry(tr('Skrót do pełnej wtyczki pogody', 'Weather plugin shortcut'), self.weatherEnabled),
             getConfigListEntry(tr('Wtyczka pogody', 'Weather plugin'), self.weatherPlugin)
         ], session=session)
-        self['actions'] = ActionMap(['OkCancelActions', 'ColorActions'], {'cancel': self.close, 'red': self.close, 'green': self.saveStyle, 'ok': self.saveStyle, 'blue': self.previewWeather, 'yellow': self.togglePluginList}, -2)
+        self['actions'] = ActionMap(['OkCancelActions', 'ColorActions', 'MenuActions'], {'cancel': self.close, 'red': self.close, 'green': self.saveStyle, 'ok': self.saveStyle, 'blue': self.previewWeather, 'yellow': self.togglePluginList, 'menu': self.openUpdater}, -2)
+
+    def openUpdater(self):
+        self.session.open(b4SkinAppUpdater)
 
     def togglePluginList(self):
         self.showAllPlugins = not self.showAllPlugins
@@ -125,7 +130,7 @@ class DreamNGStyle(Screen, ConfigListScreen):
                           self.showTimeDate.value != settings.showTimeDate.value or
                           self.showExtraInfo.value != settings.showExtraInfo.value or
                           self.showCI.value != settings.showCI.value or
-                          self.showDreamNextGenPanel.value != settings.showDreamNextGenPanel.value or
+                          self.showReceiverPanel.value != settings.showReceiverPanel.value or
                           self.channelNameColor.value != settings.channelNameColor.value or
                           self.channelDescriptionColor.value != settings.channelDescriptionColor.value)
         try:
@@ -139,7 +144,7 @@ class DreamNGStyle(Screen, ConfigListScreen):
                 'infobartimedate': self.showTimeDate.value,
                 'infobarweather': self.weatherInline.value,
                 'infobarsat': self.showExtraInfo.value,
-                'infobardng': self.showDreamNextGenPanel.value == 'dreambox',
+                'infobardng': self.showReceiverPanel.value == 'dreambox',
                 'infobarCI': self.showCI.value,
             }
             restart_needed = apply_panel_visibility(SKIN_PATH, panel_visibility) or restart_needed
@@ -147,7 +152,7 @@ class DreamNGStyle(Screen, ConfigListScreen):
             settings.showTimeDate.value = self.showTimeDate.value
             settings.showExtraInfo.value = self.showExtraInfo.value
             settings.showCI.value = self.showCI.value
-            settings.showDreamNextGenPanel.value = self.showDreamNextGenPanel.value
+            settings.showReceiverPanel.value = self.showReceiverPanel.value
             settings.channelNameColor.value = self.channelNameColor.value
             settings.channelDescriptionColor.value = self.channelDescriptionColor.value
             settings.weatherInline.value = self.weatherInline.value
@@ -176,7 +181,7 @@ class DreamNGStyle(Screen, ConfigListScreen):
 
 
 def main(session, **kwargs):
-    session.open(DreamNGStyle)
+    session.open(b4SkinAppStyle)
 
 
 def weather_main(session, **kwargs):
@@ -192,8 +197,8 @@ def sessionstart(reason, **kwargs):
 def Plugins(**kwargs):
     result = [
         PluginDescriptor(where=PluginDescriptor.WHERE_SESSIONSTART, fnc=sessionstart),
-        PluginDescriptor(name='DreamNG — Style', description=tr('Wygląd, większe czcionki i pogoda', 'Appearance, larger fonts and weather'), where=PluginDescriptor.WHERE_PLUGINMENU, icon='plugin.png', fnc=main),
+        PluginDescriptor(name='b4Default-FHD Skin App', description=tr('Wygląd, większe czcionki i pogoda', 'Appearance, larger fonts and weather'), where=PluginDescriptor.WHERE_PLUGINMENU, icon='plugin.png', fnc=main),
     ]
     if settings.weatherEnabled.value:
-        result.append(PluginDescriptor(name=tr('DreamNG — Pogoda', 'DreamNG — Weather'), description=tr('Otwórz wybraną wtyczkę pogody', 'Open selected weather plugin'), where=PluginDescriptor.WHERE_EXTENSIONSMENU, fnc=weather_main))
+        result.append(PluginDescriptor(name=tr('b4SkinApp — Pogoda', 'b4SkinApp — Weather'), description=tr('Otwórz wybraną wtyczkę pogody', 'Open selected weather plugin'), where=PluginDescriptor.WHERE_EXTENSIONSMENU, fnc=weather_main))
     return result

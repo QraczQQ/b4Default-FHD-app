@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Adaptive layout for DreamNG-owned messages; system MessageBox is untouched."""
+"""Adaptive layout for b4SkinApp messages; system MessageBox is untouched."""
 from enigma import eSize, ePoint, eLabel, gFont, getDesktop
 from Components.ActionMap import ActionMap
 from Components.config import config
@@ -43,8 +43,8 @@ def layout_message(screen):
     # Keep the full original even if a plugin reruns onLayoutFinish.
     original = getattr(screen, 'text', None)
     if not isinstance(original, str):
-        original = getattr(screen, '_dreamng_full_message', label.getText())
-    screen._dreamng_full_message = original
+        original = getattr(screen, '_b4skinapp_full_message', label.getText())
+    screen._b4skinapp_full_message = original
     label.instance.resize(eSize(text_width, text_max))
     def measured(text):
         label.setText(text)
@@ -63,22 +63,22 @@ def layout_message(screen):
     if 'Title' in screen and getattr(screen['Title'], 'master', None):
         screen['Title'].master.instance.resize(eSize(width - 160, 58))
     # The footer belongs to this screen and is destroyed along with it.
-    hint = getattr(screen, '_dreamng_page_hint', None)
+    hint = getattr(screen, '_b4skinapp_page_hint', None)
     if hint is None:
         hint = eLabel(screen.instance)
         hint.setFont(gFont('Next', 20))
         hint.setTransparent(1)
-        screen._dreamng_page_hint = hint
+        screen._b4skinapp_page_hint = hint
     hint.move(ePoint(margin, height - 40))
     hint.resize(eSize(text_width, 32))
     pl = config.osd.language.value.startswith('pl')
-    screen._dreamng_message_page = 0
+    screen._b4skinapp_message_page = 0
     def show(delta=0):
-        screen._dreamng_message_page = max(0, min(len(pages) - 1, screen._dreamng_message_page + delta))
-        label.setText(pages[screen._dreamng_message_page])
-        hint.setText(('%d / %d   |   \u2190 \u2192  %s' % (screen._dreamng_message_page + 1, len(pages),
+        screen._b4skinapp_message_page = max(0, min(len(pages) - 1, screen._b4skinapp_message_page + delta))
+        label.setText(pages[screen._b4skinapp_message_page])
+        hint.setText(('%d / %d   |   \u2190 \u2192  %s' % (screen._b4skinapp_message_page + 1, len(pages),
                       'Strony komunikatu' if pl else 'Message pages')) if len(pages) > 1 else '')
-    key = 'dreamngMessagePages'
+    key = 'b4SkinAppMessagePages'
     if key in screen:
         screen[key].setEnabled(False)
     if len(pages) > 1:
@@ -86,23 +86,23 @@ def layout_message(screen):
     show()
 
 
-class DreamNGMessageBox(MessageBox):
-    """MessageBox with DreamNG pagination, limited to this plugin's dialogs."""
+class b4SkinAppMessageBox(MessageBox):
+    """MessageBox with b4SkinApp pagination, limited to this plugin's dialogs."""
 
     def __init__(self, session, *args, **kwargs):
         MessageBox.__init__(self, session, *args, **kwargs)
         names = self.skinName if isinstance(self.skinName, list) else [self.skinName]
-        if 'DreamNGMessageBox' not in names:
-            names.insert(0, 'DreamNGMessageBox')
+        if 'b4SkinAppMessageBox' not in names:
+            names.insert(0, 'b4SkinAppMessageBox')
         self.skinName = names
 
     def applySkin(self, *args, **kwargs):
         result = MessageBox.applySkin(self, *args, **kwargs)
-        self._dreamng_layout_message()
+        self._b4skinapp_layout_message()
         return result
 
-    def _dreamng_layout_message(self):
+    def _b4skinapp_layout_message(self):
         try:
             layout_message(self)
         except Exception as error:
-            print('[DreamNG][MessageBox] layout failed: %s' % error)
+            print('[b4SkinApp][MessageBox] layout failed: %s' % error)
