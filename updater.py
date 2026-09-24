@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""GitHub version browser and in-place updater for b4Default-FHD Skin App."""
+"""GitHub version browser and in-place updater for the plugin and skin."""
 from __future__ import print_function
 
 import json
@@ -19,31 +19,53 @@ from enigma import eTimer
 from Components.ActionMap import ActionMap
 from Components.Label import Label
 from Components.MenuList import MenuList
+from Components.config import config, configfile
 from Screens.Screen import Screen
 from Screens.Standby import TryQuitMainloop
 
 from .dialog import b4SkinAppMessageBox as MessageBox
+from .paths import SKIN_DIR, SKIN_ROOT
 from .settings import tr
 
 
-REPOSITORY = 'QraczQQ/b4Default-FHD-app'
-TAGS_URL = 'https://api.github.com/repos/%s/tags?per_page=100' % REPOSITORY
+PLUGIN_REPOSITORY = 'QraczQQ/b4Default-FHD-app'
+SKIN_REPOSITORY = 'QraczQQ/b4Default-FHD-skin'
 PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
+SKIN_INSTALL_DIR = os.path.join(SKIN_ROOT, 'b4Default-FHD')
 VERSION_RE = re.compile(r'^v?(\d+)\.(\d+)\.(\d+)$')
-MAX_ARCHIVE_SIZE = 20 * 1024 * 1024
+MAX_ARCHIVE_SIZE = 30 * 1024 * 1024
 
 
-def read_version(path=None):
-    """Read the installed version without making plugin import depend on I/O."""
+def read_version(path):
     try:
-        with open(path or os.path.join(PLUGIN_DIR, 'VERSION'), 'r') as version_file:
+        with open(path, 'r') as version_file:
             value = version_file.read().strip()
         return value if VERSION_RE.match(value) else '0.0.0'
     except Exception:
         return '0.0.0'
 
 
-APP_VERSION = read_version()
+APP_VERSION = read_version(os.path.join(PLUGIN_DIR, 'VERSION'))
+SKIN_VERSION = read_version(os.path.join(SKIN_DIR, 'VERSION'))
+
+PRODUCTS = {
+    'plugin': {
+        'name_pl': 'Plugin',
+        'name_en': 'Plugin',
+        'repository': PLUGIN_REPOSITORY,
+        'current': APP_VERSION,
+        'marker': 'plugin.py',
+        'target': PLUGIN_DIR,
+    },
+    'skin': {
+        'name_pl': 'Skin',
+        'name_en': 'Skin',
+        'repository': SKIN_REPOSITORY,
+        'current': SKIN_VERSION,
+        'marker': 'skin.xml',
+        'target': SKIN_INSTALL_DIR,
+    },
+}
 
 
 def _version_tuple(value):
@@ -67,15 +89,18 @@ def _request_json(url):
     return json.loads(payload)
 
 
-def fetch_versions():
-    """Return stable semantic-version tags, newest first."""
+def fetch_product_versions(kind):
+    """Return one product's semantic-version tags, newest first."""
+    product = PRODUCTS[kind]
+    url = 'https://api.github.com/repos/%s/tags?per_page=100' % product['repository']
     result = []
-    for item in _request_json(TAGS_URL):
+    for item in _request_json(url):
         tag = str(item.get('name', '')).strip()
         version = _version_tuple(tag)
         archive_url = item.get('zipball_url')
         if version is not None and archive_url:
             result.append({
+                'kind': kind,
                 'tag': tag,
                 'version': '%d.%d.%d' % version,
                 'version_tuple': version,
@@ -85,9 +110,23 @@ def fetch_versions():
     return result
 
 
+def fetch_versions():
+    result = []
+    for kind in ('plugin', 'skin'):
+        result.extend(fetch_product_versions(kind))
+    return result
+
+
+def fetch_available_updates():
+    return [
+        release for release in fetch_versions()
+        if release['version_tuple'] > (_version_tuple(PRODUCTS[release['kind']]['current']) or (0, 0, 0))
+    ]
+
+
 def _download(url, destination):
     request = Request(url, headers={'User-Agent': 'b4Default-FHD-Skin-App/%s' % APP_VERSION})
-    response = urlopen(request, timeout=45)
+    response = urlopen(request, timeout=60)
     size = 0
     try:
         with open(destination, 'wb') as archive:
@@ -111,22 +150,19 @@ def _safe_extract(archive_path, destination):
             target = os.path.abspath(os.path.join(destination, member))
             if target != destination and not target.startswith(destination + os.sep):
                 raise ValueError(tr('Paczka zawiera niebezpieczną ścieżkę.', 'The package contains an unsafe path.'))
-            # Unix symlinks in a ZIP are not needed by this plugin.
             if (info.external_attr >> 16) & 0o170000 == 0o120000:
                 raise ValueError(tr('Paczka zawiera niedozwolony link.', 'The package contains a disallowed link.'))
         archive.extractall(destination)
 
 
-def _find_source_root(extracted):
-    candidates = []
+def _find_source_root(extracted, marker):
     for name in os.listdir(extracted):
-        path = os.path.join(extracted, name)
-        if os.path.isdir(path):
-            candidates.extend((path, os.path.join(path, 'skin_plugin', 'b4Default-FHD-app')))
-    for candidate in candidates:
-        if os.path.isfile(os.path.join(candidate, 'VERSION')) and os.path.isfile(os.path.join(candidate, 'plugin.py')):
+        candidate = os.path.join(extracted, name)
+        if (os.path.isdir(candidate) and
+                os.path.isfile(os.path.join(candidate, 'VERSION')) and
+                os.path.isfile(os.path.join(candidate, marker))):
             return candidate
-    raise ValueError(tr('Paczka nie zawiera kompletnej wtyczki.', 'The package does not contain a complete plugin.'))
+    raise ValueError(tr('Paczka nie zawiera kompletnych plików.', 'The package does not contain complete files.'))
 
 
 def _runtime_files(source):
@@ -141,8 +177,19 @@ def _runtime_files(source):
             yield relative
 
 
-def install_release(release, plugin_dir=PLUGIN_DIR):
-    """Download, validate and atomically overlay one tagged version."""
+def _activate_skin():
+    primary_skin = getattr(getattr(config, 'skin', None), 'primary_skin', None)
+    if primary_skin is None:
+        raise ValueError(tr('Nie można ustawić aktywnego skina.', 'The active skin cannot be configured.'))
+    primary_skin.value = 'b4Default-FHD/skin.xml'
+    primary_skin.save()
+    configfile.save()
+
+
+def install_release(release):
+    """Download, validate and atomically overlay one plugin or skin release."""
+    product = PRODUCTS[release['kind']]
+    target_dir = product['target']
     work_dir = tempfile.mkdtemp(prefix='b4skinapp-update-')
     archive_path = os.path.join(work_dir, 'release.zip')
     extracted = os.path.join(work_dir, 'extracted')
@@ -153,9 +200,11 @@ def install_release(release, plugin_dir=PLUGIN_DIR):
     try:
         os.makedirs(extracted)
         os.makedirs(backup)
+        if not os.path.isdir(target_dir):
+            os.makedirs(target_dir)
         _download(release['url'], archive_path)
         _safe_extract(archive_path, extracted)
-        source = _find_source_root(extracted)
+        source = _find_source_root(extracted, product['marker'])
         package_version = read_version(os.path.join(source, 'VERSION'))
         if _version_tuple(package_version) != release['version_tuple']:
             raise ValueError(tr(
@@ -165,7 +214,7 @@ def install_release(release, plugin_dir=PLUGIN_DIR):
         planned = list(_runtime_files(source))
         for relative in planned:
             source_file = os.path.join(source, relative)
-            target_file = os.path.join(plugin_dir, relative)
+            target_file = os.path.join(target_dir, relative)
             target_parent = os.path.dirname(target_file)
             if not os.path.isdir(target_parent):
                 os.makedirs(target_parent)
@@ -181,10 +230,12 @@ def install_release(release, plugin_dir=PLUGIN_DIR):
             temporary = target_file + '.b4skinapp-new'
             shutil.copy2(source_file, temporary)
             os.replace(temporary, target_file)
+        if release['kind'] == 'skin':
+            _activate_skin()
         return package_version
     except Exception:
         for relative in planned:
-            temporary = os.path.join(plugin_dir, relative) + '.b4skinapp-new'
+            temporary = os.path.join(target_dir, relative) + '.b4skinapp-new'
             try:
                 if os.path.isfile(temporary):
                     os.unlink(temporary)
@@ -192,11 +243,11 @@ def install_release(release, plugin_dir=PLUGIN_DIR):
                 pass
         for relative in installed:
             backup_file = os.path.join(backup, relative)
-            target_file = os.path.join(plugin_dir, relative)
+            target_file = os.path.join(target_dir, relative)
             if os.path.isfile(backup_file):
                 shutil.copy2(backup_file, target_file)
         for relative in created:
-            target_file = os.path.join(plugin_dir, relative)
+            target_file = os.path.join(target_dir, relative)
             try:
                 if os.path.isfile(target_file):
                     os.unlink(target_file)
@@ -208,11 +259,11 @@ def install_release(release, plugin_dir=PLUGIN_DIR):
 
 
 class b4SkinAppUpdater(Screen):
-    skin = '''<screen name="b4SkinAppUpdater" position="center,center" size="1120,690" title="b4SkinApp — Aktualizacja" backgroundColor="#000B111A">
+    skin = '''<screen name="b4SkinAppUpdater" position="center,center" size="1120,690" title="b4SkinApp — Aktualizacja" backgroundColor="#000B111A" flags="wfNoBorder">
       <eLabel position="0,0" size="1120,6" backgroundColor="#0034D6CF" />
       <widget name="heading" position="42,28" size="1036,52" font="Regular;34" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
-      <widget name="installed" position="42,84" size="1036,40" font="Regular;23" foregroundColor="#00ADBACA" backgroundColor="#000B111A" />
-      <widget name="versions" position="42,142" size="1036,380" itemHeight="54" font="Regular;28" backgroundColor="#00141E2A" foregroundColor="#00F2F5FA" backgroundColorSelected="#00007678" foregroundColorSelected="#00FFFFFF" scrollbarMode="showOnDemand" />
+      <widget name="installed" position="42,82" size="1036,64" font="Regular;22" foregroundColor="#00ADBACA" backgroundColor="#000B111A" />
+      <widget name="versions" position="42,160" size="1036,362" itemHeight="54" font="Regular;28" backgroundColor="#00141E2A" foregroundColor="#00F2F5FA" backgroundColorSelected="#00007678" foregroundColorSelected="#00FFFFFF" scrollbarMode="showOnDemand" />
       <widget name="status" position="42,538" size="1036,62" font="Regular;22" foregroundColor="#00ADBACA" backgroundColor="#000B111A" />
       <eLabel position="42,628" size="6,28" backgroundColor="#00FF5A68" />
       <widget name="key_red" position="58,618" size="250,46" font="Regular;25" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
@@ -225,8 +276,9 @@ class b4SkinAppUpdater(Screen):
     def __init__(self, session):
         Screen.__init__(self, session)
         self.setTitle(tr('b4SkinApp — Aktualizacja', 'b4SkinApp — Update'))
-        self['heading'] = Label(tr('Wybierz wersję z GitHub', 'Choose a GitHub version'))
-        self['installed'] = Label(tr('Zainstalowana wersja: ', 'Installed version: ') + APP_VERSION)
+        self['heading'] = Label(tr('Wybierz wersję', 'Choose version'))
+        self['installed'] = Label(tr(
+            'Plugin: %s\nSkin: %s', 'Plugin: %s\nSkin: %s') % (APP_VERSION, SKIN_VERSION))
         self['versions'] = MenuList([])
         self['status'] = Label('')
         self['key_red'] = Label(tr('Zamknij', 'Close'))
@@ -250,7 +302,7 @@ class b4SkinAppUpdater(Screen):
         self.onClose.append(self._on_close)
 
     def _first_show(self):
-        if self.onShown:
+        if self._first_show in self.onShown:
             self.onShown.remove(self._first_show)
         self.refresh()
 
@@ -307,22 +359,23 @@ class b4SkinAppUpdater(Screen):
             self['status'].setText(tr('Nie udało się pobrać wersji: ', 'Could not download versions: ') + result)
             return
         self.releases = result
-        current = _version_tuple(APP_VERSION) or (0, 0, 0)
         entries = []
+        newer = 0
         for release in result:
-            suffix = tr('  — nowsza', '  — newer') if release['version_tuple'] > current else ''
-            if release['version_tuple'] == current:
+            product = PRODUCTS[release['kind']]
+            current = _version_tuple(product['current']) or (0, 0, 0)
+            suffix = ''
+            if release['version_tuple'] > current:
+                suffix = tr('  — nowsza', '  — newer')
+                newer += 1
+            elif release['version_tuple'] == current:
                 suffix = tr('  — zainstalowana', '  — installed')
-            entries.append(release['version'] + suffix)
+            entries.append('%s  %s%s' % (tr(product['name_pl'], product['name_en']), release['version'], suffix))
         self['versions'].setList(entries)
         if entries:
-            newer = len([release for release in result if release['version_tuple'] > current])
-            self['status'].setText(
-                tr('Dostępne nowsze wersje: %d', 'Newer versions available: %d') % newer)
+            self['status'].setText(tr('Dostępne nowsze wersje: %d', 'Newer versions available: %d') % newer)
         else:
-            self['status'].setText(tr(
-                'Brak wersji. Opublikuj w repozytorium tag v1.0.1.',
-                'No versions found. Publish the v1.0.1 tag in the repository.'))
+            self['status'].setText(tr('Brak opublikowanych wersji.', 'No published versions found.'))
 
     def installSelected(self):
         if self.busy or not self.releases:
@@ -331,9 +384,11 @@ class b4SkinAppUpdater(Screen):
         if index < 0 or index >= len(self.releases):
             return
         release = self.releases[index]
+        product = PRODUCTS[release['kind']]
+        product_name = tr(product['name_pl'], product['name_en'])
         question = tr(
-            'Zainstalować wersję %s?\nPliki wtyczki zostaną zastąpione, a ustawienia użytkownika pozostaną bez zmian.',
-            'Install version %s?\nPlugin files will be replaced; user settings will remain unchanged.') % release['version']
+            'Zainstalować %s w wersji %s?\nPliki zostaną bezpiecznie zastąpione.',
+            'Install %s version %s?\nFiles will be replaced safely.') % (product_name, release['version'])
         self.session.openWithCallback(
             lambda answer: self._confirmed(answer, release),
             MessageBox, question, MessageBox.TYPE_YESNO, default=False)
@@ -341,18 +396,28 @@ class b4SkinAppUpdater(Screen):
     def _confirmed(self, answer, release):
         if not answer or self.busy:
             return
-        self['status'].setText(tr('Pobieranie i instalowanie wersji %s…', 'Downloading and installing version %s…') % release['version'])
+        product = PRODUCTS[release['kind']]
+        self['status'].setText(tr(
+            'Pobieranie i instalowanie: %s %s…',
+            'Downloading and installing: %s %s…') %
+            (tr(product['name_pl'], product['name_en']), release['version']))
+        self.installing_release = release
         self._run(lambda: install_release(release), self._installed)
 
     def _installed(self, success, result):
         if not success:
             self['status'].setText(tr('Aktualizacja nie powiodła się.', 'Update failed.'))
-            self.session.open(MessageBox, tr('Nie udało się zaktualizować wtyczki:\n', 'Could not update the plugin:\n') + result, MessageBox.TYPE_ERROR)
+            self.session.open(MessageBox, tr(
+                'Nie udało się wykonać aktualizacji:\n',
+                'Could not complete the update:\n') + result, MessageBox.TYPE_ERROR)
             return
-        self['status'].setText(tr('Zainstalowano wersję %s.', 'Installed version %s.') % result)
+        product = PRODUCTS[self.installing_release['kind']]
+        product_name = tr(product['name_pl'], product['name_en'])
+        self['status'].setText(tr('Zainstalowano: %s %s.', 'Installed: %s %s.') % (product_name, result))
         self.session.openWithCallback(
             self._restart, MessageBox,
-            tr('Zainstalowano wersję %s. Uruchomić ponownie GUI?', 'Version %s was installed. Restart the GUI?') % result,
+            tr('Zainstalowano %s %s. Uruchomić ponownie GUI?',
+               '%s %s was installed. Restart the GUI?') % (product_name, result),
             MessageBox.TYPE_YESNO, default=True)
 
     def _restart(self, answer):

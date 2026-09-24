@@ -189,6 +189,35 @@ def apply_panel_visibility(path, visibility):
     return True
 
 
+def read_panel_visibility(path):
+    """Read the actual InfoBar panel state from skin.xml."""
+    with open(path, 'rb') as stream:
+        text = stream.read().decode('utf-8')
+    screen_pattern = re.compile(
+        r'<screen\b(?=[^>]*\bname\s*=\s*["\']InfoBar["\'])[^>]*>(.*?)</screen>',
+        re.DOTALL,
+    )
+    screen_match = screen_pattern.search(text)
+    if screen_match is None:
+        raise ValueError('InfoBar screen not found')
+    body = screen_match.group(1)
+    result = {}
+    for name in INFOBAR_PANELS:
+        enabled = re.search(
+            r'^\s*<panel\b(?=[^>]*\bname\s*=\s*["\']%s["\'])[^>]*/>\s*$' % re.escape(name),
+            body,
+            re.MULTILINE,
+        )
+        disabled = re.search(
+            r'^\s*<!--\s*[A-Za-z0-9_-]+ panel %s disabled\s*-->\s*$' % re.escape(name),
+            body,
+            re.MULTILINE,
+        )
+        if bool(enabled) != bool(disabled):
+            result[name] = bool(enabled)
+    return result
+
+
 def apply_channel_colors(path, service_name, service_description):
     """Set the normal and selected service-list colors in ChannelSelection."""
     if service_name not in CHANNEL_COLORS:

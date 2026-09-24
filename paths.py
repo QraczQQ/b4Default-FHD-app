@@ -18,10 +18,13 @@ def resolve_skin_path():
             candidate = os.path.join(candidate, 'skin.xml')
         if os.path.isfile(candidate) and 'Default-FHD' in candidate:
             return candidate
-    candidates = sorted(glob.glob(os.path.join(SKIN_ROOT, 'Default-FHD*', 'skin.xml')))
+    candidates = []
+    for pattern in ('b4Default-FHD', '*Default-FHD*'):
+        candidates.extend(glob.glob(os.path.join(SKIN_ROOT, pattern, 'skin.xml')))
+    candidates = sorted(set(candidates), key=lambda path: (os.path.basename(os.path.dirname(path)) != 'b4Default-FHD', path))
     if candidates:
         return candidates[0]
-    return os.path.join(SKIN_ROOT, 'Default-FHD', 'skin.xml')
+    return os.path.join(SKIN_ROOT, 'b4Default-FHD', 'skin.xml')
 
 
 SKIN_PATH = resolve_skin_path()
