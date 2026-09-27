@@ -279,7 +279,7 @@ def install_release(release):
 
 class b4SkinAppUpdater(Screen):
     skin = '''<screen name="b4SkinAppUpdater" position="center,center" size="1120,690" title="b4SkinApp — Aktualizacja" backgroundColor="#000B111A" flags="wfNoBorder">
-      <eLabel position="0,0" size="1114,6" backgroundColor="#0034D6CF" />
+      <eLabel position="0,0" size="1114,6" backgroundColor="#00B000FF" />
       <widget name="heading" position="42,28" size="1036,52" font="Regular;34" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
       <widget name="installed" position="42,82" size="1036,64" font="Regular;22" foregroundColor="#00ADBACA" backgroundColor="#000B111A" />
       <widget name="versions" position="42,160" size="1036,362" itemHeight="54" font="Regular;28" backgroundColor="#00141E2A" foregroundColor="#00F2F5FA" backgroundColorSelected="#00B000FF" foregroundColorSelected="#00FFFFFF" scrollbarMode="showOnDemand" />
