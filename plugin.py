@@ -20,7 +20,7 @@ from .paths import SKIN_PATH
 
 class b4SkinAppStyle(Screen, ConfigListScreen):
     skin = '''<screen name="b4SkinAppStyle" position="center,center" size="1360,800" title="b4Default-FHD Skin App" backgroundColor="#000B111A" flags="wfNoBorder">
-      <eLabel position="0,0" size="1360,6" backgroundColor="#0034D6CF" />
+      <eLabel position="0,0" size="1360,6" backgroundColor="#00B000FF" />
       <widget name="heading" position="44,30" size="690,56" font="Regular;36" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
       <widget name="version" position="742,18" size="574,62" font="Regular;22" halign="right" foregroundColor="#00ADBACA" backgroundColor="#000B111A" />
       <widget name="update_hint" position="742,80" size="574,28" font="Regular;20" halign="right" foregroundColor="#00F6C56C" backgroundColor="#000B111A" />
@@ -30,7 +30,10 @@ class b4SkinAppStyle(Screen, ConfigListScreen):
       <widget name="key_red" position="62,704" size="280,48" font="Regular;27" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
       <eLabel position="362,714" size="6,30" backgroundColor="#006BE3A2" />
       <widget name="key_green" position="380,704" size="280,48" font="Regular;27" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
-    </screen>''' 
+      <eLabel position="0,796" size="1360,6" backgroundColor="#00B000FF" />
+      <eLabel position="0,6" size="6,789" backgroundColor="#00B000FF" />
+      <eLabel position="1354,6" size="6,789" backgroundColor="#00B000FF" />
+      </screen>'''
 
     def __init__(self, session):
         Screen.__init__(self, session)
