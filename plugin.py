@@ -24,7 +24,7 @@ class b4SkinAppStyle(Screen, ConfigListScreen):
       <widget name="heading" position="44,30" size="690,56" font="Regular;36" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
       <widget name="version" position="742,18" size="574,62" font="Regular;22" halign="right" foregroundColor="#00ADBACA" backgroundColor="#000B111A" />
       <widget name="update_hint" position="742,80" size="574,28" font="Regular;20" halign="right" foregroundColor="#00F6C56C" backgroundColor="#000B111A" />
-      <widget name="config" position="44,112" size="1272,504" itemHeight="56" font="Regular;30" backgroundColor="#00141E2A" foregroundColor="#00F2F5FA" backgroundColorSelected="#00007678" foregroundColorSelected="#00FFFFFF" scrollbarMode="showOnDemand" />
+      <widget name="config" position="44,112" size="1272,504" itemHeight="56" font="Regular;30" backgroundColor="#00141E2A" foregroundColor="#00F2F5FA" backgroundColorSelected="#00B000FF" foregroundColorSelected="#00FFFFFF" scrollbarMode="showOnDemand" />
       <widget name="description" position="44,625" size="1272,72" font="Regular;20" foregroundColor="#00ADBACA" backgroundColor="#000B111A" />
       <eLabel position="44,714" size="6,30" backgroundColor="#00FF5A68" />
       <widget name="key_red" position="62,704" size="280,48" font="Regular;27" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
@@ -38,7 +38,7 @@ class b4SkinAppStyle(Screen, ConfigListScreen):
     def __init__(self, session):
         Screen.__init__(self, session)
         self.setTitle('b4Default-FHD Skin App')
-        self['heading'] = Label(tr('b4Default-FHD Skin App — wygląd i pogoda', 'b4Default-FHD Skin App — appearance and weather'))
+        self['heading'] = Label(tr('b4Default-FHD Skin App', 'b4Default-FHD Skin App'))
         self['version'] = Label('Plugin: %s\nSkin: %s' % (APP_VERSION, SKIN_VERSION))
         self['update_hint'] = Label('')
         self['key_red'] = Label(tr('Anuluj', 'Cancel'))
@@ -93,7 +93,11 @@ class b4SkinAppStyle(Screen, ConfigListScreen):
             getConfigListEntry(tr('Pogoda bezpośrednio w skinie', 'Inline weather in skin'), self.weatherInline),
             getConfigListEntry(tr('Źródło danych pogody', 'Inline weather provider'), self.weatherProvider)
         ], session=session)
-        self['actions'] = ActionMap(['OkCancelActions', 'ColorActions', 'MenuActions'], {'cancel': self.close, 'red': self.close, 'green': self.saveStyle, 'ok': self.saveStyle, 'menu': self.openUpdater}, -2)
+        self['actions'] = ActionMap(
+            ['OkCancelActions', 'ColorActions', 'MenuActions', 'InfoActions'],
+            {'cancel': self.close, 'red': self.close, 'green': self.saveStyle,
+             'ok': self.saveStyle, 'menu': self.openUpdater,
+             'info': self.openVersionBrowser}, -2)
         self.updateAvailable = False
         self.updateCheckClosed = False
         self.updateCheckResult = None
@@ -109,6 +113,9 @@ class b4SkinAppStyle(Screen, ConfigListScreen):
     def openUpdater(self):
         if self.updateAvailable:
             self.session.open(b4SkinAppUpdater)
+
+    def openVersionBrowser(self):
+        self.session.open(b4SkinAppUpdater)
 
     def _startUpdateCheck(self):
         if self._startUpdateCheck in self.onShown:

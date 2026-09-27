@@ -187,7 +187,7 @@ def _activate_skin():
 
 
 def install_release(release):
-    """Download, validate and atomically overlay one plugin or skin release."""
+    """Download, validate and atomically synchronize one product release."""
     product = PRODUCTS[release['kind']]
     target_dir = product['target']
     work_dir = tempfile.mkdtemp(prefix='b4skinapp-update-')
@@ -211,7 +211,12 @@ def install_release(release):
                 'Numer w pliku VERSION nie zgadza się z wybraną wersją.',
                 'The VERSION file does not match the selected release.'))
 
-        planned = list(_runtime_files(source))
+        planned = sorted(_runtime_files(source))
+        planned_set = set(planned)
+        obsolete = sorted(
+            relative for relative in _runtime_files(target_dir)
+            if relative not in planned_set
+        )
         for relative in planned:
             source_file = os.path.join(source, relative)
             target_file = os.path.join(target_dir, relative)
@@ -230,6 +235,20 @@ def install_release(release):
             temporary = target_file + '.b4skinapp-new'
             shutil.copy2(source_file, temporary)
             os.replace(temporary, target_file)
+        # A downgrade must reproduce the selected release, not merely overlay it.
+        # Back up files absent from the selected package before removing them so
+        # the existing rollback path can restore the previous installation.
+        for relative in obsolete:
+            target_file = os.path.join(target_dir, relative)
+            if not os.path.isfile(target_file):
+                continue
+            backup_file = os.path.join(backup, relative)
+            backup_parent = os.path.dirname(backup_file)
+            if not os.path.isdir(backup_parent):
+                os.makedirs(backup_parent)
+            shutil.copy2(target_file, backup_file)
+            installed.append(relative)
+            os.unlink(target_file)
         if release['kind'] == 'skin':
             _activate_skin()
         return package_version
@@ -260,10 +279,10 @@ def install_release(release):
 
 class b4SkinAppUpdater(Screen):
     skin = '''<screen name="b4SkinAppUpdater" position="center,center" size="1120,690" title="b4SkinApp — Aktualizacja" backgroundColor="#000B111A" flags="wfNoBorder">
-      <eLabel position="0,0" size="1120,6" backgroundColor="#0034D6CF" />
+      <eLabel position="0,0" size="1114,6" backgroundColor="#0034D6CF" />
       <widget name="heading" position="42,28" size="1036,52" font="Regular;34" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
       <widget name="installed" position="42,82" size="1036,64" font="Regular;22" foregroundColor="#00ADBACA" backgroundColor="#000B111A" />
-      <widget name="versions" position="42,160" size="1036,362" itemHeight="54" font="Regular;28" backgroundColor="#00141E2A" foregroundColor="#00F2F5FA" backgroundColorSelected="#00007678" foregroundColorSelected="#00FFFFFF" scrollbarMode="showOnDemand" />
+      <widget name="versions" position="42,160" size="1036,362" itemHeight="54" font="Regular;28" backgroundColor="#00141E2A" foregroundColor="#00F2F5FA" backgroundColorSelected="#00B000FF" foregroundColorSelected="#00FFFFFF" scrollbarMode="showOnDemand" />
       <widget name="status" position="42,538" size="1036,62" font="Regular;22" foregroundColor="#00ADBACA" backgroundColor="#000B111A" />
       <eLabel position="42,628" size="6,28" backgroundColor="#00FF5A68" />
       <widget name="key_red" position="58,618" size="250,46" font="Regular;25" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
@@ -271,6 +290,9 @@ class b4SkinAppUpdater(Screen):
       <widget name="key_green" position="406,618" size="300,46" font="Regular;25" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
       <eLabel position="758,628" size="6,28" backgroundColor="#00F6C56C" />
       <widget name="key_yellow" position="774,618" size="300,46" font="Regular;25" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
+      <eLabel position="0,684" size="1120,6" backgroundColor="#00B000FF" />
+      <eLabel position="0,6" size="6,678" backgroundColor="#00B000FF" />
+      <eLabel position="1114,0" size="6,684" backgroundColor="#00B000FF" />
     </screen>'''
 
     def __init__(self, session):
@@ -369,11 +391,18 @@ class b4SkinAppUpdater(Screen):
                 suffix = tr('  — nowsza', '  — newer')
                 newer += 1
             elif release['version_tuple'] == current:
-                suffix = tr('  — zainstalowana', '  — installed')
+                suffix = tr('  — zainstalowana / reinstalacja',
+                            '  — installed / reinstall')
+            else:
+                suffix = tr('  — starsza / downgrade',
+                            '  — older / downgrade')
             entries.append('%s  %s%s' % (tr(product['name_pl'], product['name_en']), release['version'], suffix))
         self['versions'].setList(entries)
         if entries:
-            self['status'].setText(tr('Dostępne nowsze wersje: %d', 'Newer versions available: %d') % newer)
+            self['status'].setText(tr(
+                'Wersje: %d, w tym nowsze: %d. Możliwa reinstalacja i downgrade.',
+                'Versions: %d, including newer: %d. Reinstall and downgrade are available.') %
+                (len(entries), newer))
         else:
             self['status'].setText(tr('Brak opublikowanych wersji.', 'No published versions found.'))
 
@@ -386,9 +415,20 @@ class b4SkinAppUpdater(Screen):
         release = self.releases[index]
         product = PRODUCTS[release['kind']]
         product_name = tr(product['name_pl'], product['name_en'])
-        question = tr(
-            'Zainstalować %s w wersji %s?\nPliki zostaną bezpiecznie zastąpione.',
-            'Install %s version %s?\nFiles will be replaced safely.') % (product_name, release['version'])
+        current = _version_tuple(product['current']) or (0, 0, 0)
+        if release['version_tuple'] < current:
+            question = tr(
+                'Wykonać downgrade %s do wersji %s?\nPliki zostaną zsynchronizowane z wybraną wersją.',
+                'Downgrade %s to version %s?\nFiles will be synchronized with the selected version.')
+        elif release['version_tuple'] == current:
+            question = tr(
+                'Ponownie zainstalować %s w wersji %s?\nPliki zostaną bezpiecznie zastąpione.',
+                'Reinstall %s version %s?\nFiles will be replaced safely.')
+        else:
+            question = tr(
+                'Zaktualizować %s do wersji %s?\nPliki zostaną bezpiecznie zastąpione.',
+                'Update %s to version %s?\nFiles will be replaced safely.')
+        question = question % (product_name, release['version'])
         self.session.openWithCallback(
             lambda answer: self._confirmed(answer, release),
             MessageBox, question, MessageBox.TYPE_YESNO, default=False)
