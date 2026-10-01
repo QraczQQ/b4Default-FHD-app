@@ -117,9 +117,38 @@ def fetch_versions():
     return result
 
 
+def latest_releases(releases):
+    """Return at most the newest release of each product."""
+    newest = {}
+    for release in releases:
+        kind = release['kind']
+        current = newest.get(kind)
+        if current is None or release['version_tuple'] > current['version_tuple']:
+            newest[kind] = release
+    return [newest[kind] for kind in ('plugin', 'skin') if kind in newest]
+
+
+def archive_releases(releases):
+    """Return published releases older than each product's newest release."""
+    newest = dict((release['kind'], release) for release in latest_releases(releases))
+    return [
+        release for release in releases
+        if (release['kind'] in newest and
+            release['version_tuple'] < newest[release['kind']]['version_tuple'])
+    ]
+
+
+def fetch_latest_versions():
+    return latest_releases(fetch_versions())
+
+
+def fetch_archive_versions():
+    return archive_releases(fetch_versions())
+
+
 def fetch_available_updates():
     return [
-        release for release in fetch_versions()
+        release for release in fetch_latest_versions()
         if release['version_tuple'] > (_version_tuple(PRODUCTS[release['kind']]['current']) or (0, 0, 0))
     ]
 
@@ -285,20 +314,27 @@ class b4SkinAppUpdater(Screen):
       <widget name="versions" position="42,160" size="1036,362" itemHeight="54" font="Regular;28" backgroundColor="#00141E2A" foregroundColor="#00F2F5FA" backgroundColorSelected="#00B000FF" foregroundColorSelected="#00FFFFFF" scrollbarMode="showOnDemand" />
       <widget name="status" position="42,538" size="1036,62" font="Regular;22" foregroundColor="#00ADBACA" backgroundColor="#000B111A" />
       <eLabel position="42,628" size="6,28" backgroundColor="#00FF5A68" />
-      <widget name="key_red" position="58,618" size="250,46" font="Regular;25" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
-      <eLabel position="390,628" size="6,28" backgroundColor="#006BE3A2" />
-      <widget name="key_green" position="406,618" size="300,46" font="Regular;25" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
-      <eLabel position="758,628" size="6,28" backgroundColor="#00F6C56C" />
-      <widget name="key_yellow" position="774,618" size="300,46" font="Regular;25" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
+      <widget name="key_red" position="58,618" size="190,46" font="Regular;23" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
+      <eLabel position="272,628" size="6,28" backgroundColor="#006BE3A2" />
+      <widget name="key_green" position="288,618" size="210,46" font="Regular;23" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
+      <eLabel position="522,628" size="6,28" backgroundColor="#00F6C56C" />
+      <widget name="key_yellow" position="538,618" size="210,46" font="Regular;23" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
+      <eLabel position="772,628" size="6,28" backgroundColor="#002FA8FF" />
+      <widget name="key_blue" position="788,618" size="290,46" font="Regular;23" foregroundColor="#00F2F5FA" backgroundColor="#000B111A" />
       <eLabel position="0,684" size="1120,6" backgroundColor="#00B000FF" />
       <eLabel position="0,6" size="6,678" backgroundColor="#00B000FF" />
       <eLabel position="1114,0" size="6,684" backgroundColor="#00B000FF" />
     </screen>'''
 
-    def __init__(self, session):
+    def __init__(self, session, archive=False):
         Screen.__init__(self, session)
-        self.setTitle(tr('b4SkinApp — Aktualizacja', 'b4SkinApp — Update'))
-        self['heading'] = Label(tr('Wybierz wersję', 'Choose version'))
+        self.archive = archive
+        if self.archive:
+            self.setTitle(tr('b4SkinApp — Archiwum wersji', 'b4SkinApp — Version archive'))
+            self['heading'] = Label(tr('Archiwum wersji', 'Version archive'))
+        else:
+            self.setTitle(tr('b4SkinApp — Aktualizacja', 'b4SkinApp — Update'))
+            self['heading'] = Label(tr('Najnowsze dostępne wersje', 'Latest available versions'))
         self['installed'] = Label(tr(
             'Plugin: %s\nSkin: %s', 'Plugin: %s\nSkin: %s') % (APP_VERSION, SKIN_VERSION))
         self['versions'] = MenuList([])
@@ -306,6 +342,7 @@ class b4SkinAppUpdater(Screen):
         self['key_red'] = Label(tr('Zamknij', 'Close'))
         self['key_green'] = Label(tr('Zainstaluj', 'Install'))
         self['key_yellow'] = Label(tr('Odśwież', 'Refresh'))
+        self['key_blue'] = Label('' if self.archive else tr('Archiwum wersji', 'Version archive'))
         self.releases = []
         self.busy = False
         self.closed = False
@@ -319,7 +356,8 @@ class b4SkinAppUpdater(Screen):
         self['actions'] = ActionMap(
             ['OkCancelActions', 'ColorActions'],
             {'cancel': self.closeUpdater, 'red': self.closeUpdater, 'ok': self.installSelected,
-             'green': self.installSelected, 'yellow': self.refresh}, -2)
+             'green': self.installSelected, 'yellow': self.refresh,
+             'blue': self.openArchive}, -2)
         self.onShown.append(self._first_show)
         self.onClose.append(self._on_close)
 
@@ -338,6 +376,10 @@ class b4SkinAppUpdater(Screen):
     def closeUpdater(self):
         if not self.busy:
             self.close()
+
+    def openArchive(self):
+        if not self.busy and not self.archive:
+            self.session.open(b4SkinAppUpdater, archive=True)
 
     def _run(self, worker, callback):
         if self.busy:
@@ -371,10 +413,16 @@ class b4SkinAppUpdater(Screen):
     def refresh(self):
         if self.busy:
             return
-        self['status'].setText(tr('Pobieranie listy wersji…', 'Downloading version list…'))
+        if self.archive:
+            status = tr('Pobieranie archiwum wersji…', 'Downloading version archive…')
+            worker = fetch_archive_versions
+        else:
+            status = tr('Sprawdzanie najnowszych wersji…', 'Checking latest versions…')
+            worker = fetch_latest_versions
+        self['status'].setText(status)
         self['versions'].setList([])
         self.releases = []
-        self._run(fetch_versions, self._versions_loaded)
+        self._run(worker, self._versions_loaded)
 
     def _versions_loaded(self, success, result):
         if not success:
@@ -398,11 +446,16 @@ class b4SkinAppUpdater(Screen):
                             '  — older / downgrade')
             entries.append('%s  %s%s' % (tr(product['name_pl'], product['name_en']), release['version'], suffix))
         self['versions'].setList(entries)
-        if entries:
+        if entries and self.archive:
             self['status'].setText(tr(
-                'Wersje: %d, w tym nowsze: %d. Możliwa reinstalacja i downgrade.',
-                'Versions: %d, including newer: %d. Reinstall and downgrade are available.') %
-                (len(entries), newer))
+                'Wersje archiwalne: %d. Możliwa reinstalacja i downgrade.',
+                'Archived versions: %d. Reinstall and downgrade are available.') % len(entries))
+        elif entries:
+            self['status'].setText(tr(
+                'Najnowsze wersje: %d, w tym aktualizacje: %d.',
+                'Latest versions: %d, including updates: %d.') % (len(entries), newer))
+        elif self.archive:
+            self['status'].setText(tr('Brak starszych wersji w archiwum.', 'No older versions in the archive.'))
         else:
             self['status'].setText(tr('Brak opublikowanych wersji.', 'No published versions found.'))
 

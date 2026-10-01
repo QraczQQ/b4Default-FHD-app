@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import io
 import threading
 
 from enigma import eTimer
@@ -16,6 +17,32 @@ from .dialog import b4SkinAppMessageBox as MessageBox
 from .weather import open_weather, start_weather_sources
 from .updater import APP_VERSION, SKIN_VERSION, b4SkinAppUpdater, fetch_available_updates
 from .paths import SKIN_PATH
+
+
+SUPPORTED_RECEIVER_PANEL_MODELS = frozenset((
+    'two',
+    'one',
+    'dreamtwo',
+    'dreamone',
+    'dreambox two',
+    'dreambox one',
+))
+
+
+def get_device_model():
+    """Return the receiver model reported by /proc/stb/info/model."""
+    try:
+        with io.open('/proc/stb/info/model', 'r', encoding='utf-8', errors='ignore') as stream:
+            model = stream.readline().strip()
+        return model or 'unknown'
+    except Exception:
+        return 'unknown'
+
+
+def supports_receiver_panel(model=None):
+    """Return whether the receiver supports the Dreambox data panel."""
+    model = get_device_model() if model is None else model
+    return ' '.join(model.lower().split()) in SUPPORTED_RECEIVER_PANEL_MODELS
 
 
 class b4SkinAppStyle(Screen, ConfigListScreen):
@@ -54,11 +81,12 @@ class b4SkinAppStyle(Screen, ConfigListScreen):
             panel_visibility = read_panel_visibility(SKIN_PATH)
         except Exception:
             panel_visibility = {}
+        self.receiverPanelSupported = supports_receiver_panel()
         self.showTimeDate = ConfigYesNo(default=panel_visibility.get('infobartimedate', settings.showTimeDate.value))
         self.showExtraInfo = ConfigYesNo(default=panel_visibility.get('infobarsat', settings.showExtraInfo.value))
         self.showCI = ConfigYesNo(default=panel_visibility.get('infobarCI', settings.showCI.value))
         self.showReceiverPanel = ConfigSelection(
-            default='dreambox' if panel_visibility.get('infobardng', settings.showReceiverPanel.value == 'dreambox') else 'no',
+            default='dreambox' if self.receiverPanelSupported and panel_visibility.get('infobardng', settings.showReceiverPanel.value == 'dreambox') else 'no',
             choices=[('no', tr('Nie', 'No')), ('dreambox', 'DMTwo/DMOne')],
         )
         color_choices = [
@@ -81,7 +109,7 @@ class b4SkinAppStyle(Screen, ConfigListScreen):
             ('auto', tr('Automatycznie (WeatherPlugin → OpenATV)', 'Automatic (WeatherPlugin → OpenATV)')),
             ('metrix', 'OpenATV / MetrixWeather'),
         ])
-        ConfigListScreen.__init__(self, [
+        config_entries = [
             getConfigListEntry(tr('Kolor przewodni', 'Accent colour'), self.palette),
             getConfigListEntry(tr('Czcionka listy kanałów', 'Channel list font'), self.listSize),
             getConfigListEntry(tr('Kolor nazwy kanału', 'Channel name colour'), self.channelNameColor),
@@ -89,10 +117,17 @@ class b4SkinAppStyle(Screen, ConfigListScreen):
             getConfigListEntry(tr('Pokaż datę i czas', 'Show date and time'), self.showTimeDate),
             getConfigListEntry(tr('Pokaż dane dodatkowe', 'Show additional information'), self.showExtraInfo),
             getConfigListEntry(tr('Pokaż Dane CI', 'Show CI data'), self.showCI),
-            getConfigListEntry(tr('Pokaż panel odbiornika', 'Show receiver panel'), self.showReceiverPanel),
+        ]
+        if self.receiverPanelSupported:
+            config_entries.append(getConfigListEntry(
+                tr('Panel dane dodatkowe', 'Additional data panel'),
+                self.showReceiverPanel,
+            ))
+        config_entries.extend([
             getConfigListEntry(tr('Pogoda bezpośrednio w skinie', 'Inline weather in skin'), self.weatherInline),
             getConfigListEntry(tr('Źródło danych pogody', 'Inline weather provider'), self.weatherProvider)
-        ], session=session)
+        ])
+        ConfigListScreen.__init__(self, config_entries, session=session)
         self['actions'] = ActionMap(
             ['OkCancelActions', 'ColorActions', 'MenuActions', 'InfoActions'],
             {'cancel': self.close, 'red': self.close, 'green': self.saveStyle,
